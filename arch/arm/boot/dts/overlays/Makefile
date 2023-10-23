@@ -83,6 +83,7 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	gpio-poweroff.dtbo \
 	gpio-shutdown.dtbo \
 	hd44780-lcd.dtbo \
+	hdc302x.dtbo \
 	hdmi-backlight-hwhack-gpio.dtbo \
 	hifiberry-amp.dtbo \
 	hifiberry-amp100.dtbo \

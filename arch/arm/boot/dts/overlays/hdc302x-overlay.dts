@@ -1,0 +1,43 @@
+/dts-v1/;
+/plugin/;
+
+/* Overlay for HDC302x on i2c */
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+	compatible = "brcm,bcm2835";
+
+	fragment@0 {
+		target = <&i2c1>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			hdc3020: hdc3020@44 {
+				compatible = "ti,hdc3020";
+				reg = <0x44>;
+				interrupt-parent = <&gpio>;
+				interrupts = <27 IRQ_TYPE_EDGE_RISING>;
+				status = "okay";
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&gpio>;
+		__overlay__ {
+			hdc3020_pins: hdc3020_pins {
+				brcm,pins = <27>;
+				brcm,function = <0>; /* in */
+			};
+		};
+	};
+
+
+	__overrides__ {
+		alarm_pin = <&hdc3020>, "interrupts:0",
+			    <&hdc3020_pins>, "brcm,pins:0";
+	};
+};
