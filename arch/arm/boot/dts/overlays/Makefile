@@ -25,6 +25,7 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	applepi-dac.dtbo \
 	arducam-64mp.dtbo \
 	arducam-pivariety.dtbo \
+	as7331.dtbo \
 	at86rf233.dtbo \
 	audioinjector-addons.dtbo \
 	audioinjector-bare-i2s.dtbo \

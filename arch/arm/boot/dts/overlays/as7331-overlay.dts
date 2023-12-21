@@ -1,0 +1,73 @@
+/dts-v1/;
+/plugin/;
+
+/* Overlay for AS7331 on i2c */
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+	compatible = "brcm,bcm2835";
+
+	fragment@0 {
+		target = <&i2cbus>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			as7331: as7331@74 {
+				compatible = "ams,as7331";
+				reg = <0x74>;
+				status = "okay";
+				interrupt-parent = <&gpio>;
+				interrupts = <27 IRQ_TYPE_EDGE_RISING>;
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&gpio>;
+		__overlay__ {
+			as7331_pins: as7331_pins {
+				brcm,pins = <27>;
+				brcm,function = <0>; /* in */
+			};
+		};
+	};
+
+	frag100: fragment@100 {
+		target = <&i2c_arm>;
+		i2cbus: __overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@101 {
+		target = <&i2c0if>;
+		__dormant__ {
+			status = "okay";
+		};
+	};
+
+	fragment@102 {
+		target = <&i2c0mux>;
+		__dormant__ {
+			status = "okay";
+		};
+	};
+
+	__overrides__ {
+		i2c0 = <&frag100>, "target:0=",<&i2c0>;
+		i2c_csi_dsi = <&frag100>, "target:0=",<&i2c_csi_dsi>,
+			      <0>,"+101+102";
+		i2c3 = <&frag100>, "target?=0",
+		       <&frag100>, "target-path=i2c3";
+		i2c4 = <&frag100>, "target?=0",
+		       <&frag100>, "target-path=i2c4";
+		i2c5 = <&frag100>, "target?=0",
+		       <&frag100>, "target-path=i2c5";
+		i2c6 = <&frag100>, "target?=0",
+		       <&frag100>, "target-path=i2c6";
+	};
+};
+
