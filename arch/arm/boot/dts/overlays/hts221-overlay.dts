@@ -1,0 +1,43 @@
+/dts-v1/;
+/plugin/;
+
+/* Overlay for HTS221 on i2c */
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+	compatible = "brcm,bcm2835";
+
+	fragment@0 {
+		target = <&i2c1>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			hts221: hts221@5f {
+				compatible = "st,hts221-humid", "st,hts221";
+				reg = <0x5f>;
+				interrupt-parent = <&gpio>;
+				interrupts = <22 IRQ_TYPE_EDGE_RISING>;
+				status = "okay";
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&gpio>;
+		__overlay__ {
+			hts221_pins: hts221_pins {
+				brcm,pins = <22>;
+				brcm,function = <0>; /* in */
+			};
+		};
+	};
+
+
+	__overrides__ {
+		drdy_pin = <&hts221>, "interrupts:0",
+			   <&hts221_pins>, "brcm,pins:0";
+	};
+};
