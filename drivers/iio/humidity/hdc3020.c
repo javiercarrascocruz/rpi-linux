@@ -376,6 +376,7 @@ static int hdc3020_write_thresh(struct iio_dev *indio_dev,
 	u16 reg;
 	int ret;
 
+	dev_err(&data->client->dev, "JCC: val = %d, val2 = %d\n", val, val2);
 	/* Supported temperature range is from –40 to 125 degree celsius */
 	if (val < HDC3020_MIN_TEMP || val > HDC3020_MAX_TEMP)
 		return -EINVAL;
