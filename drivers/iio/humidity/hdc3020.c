@@ -15,11 +15,14 @@
 #include <linux/cleanup.h>
 #include <linux/crc8.h>
 #include <linux/delay.h>
+#include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/pm.h>
+#include <linux/regulator/consumer.h>
 #include <linux/units.h>
 
 #include <asm/unaligned.h>
@@ -68,6 +71,8 @@
 
 struct hdc3020_data {
 	struct i2c_client *client;
+	struct gpio_desc *reset_gpio;
+	struct regulator *vdd_supply;
 	/*
 	 * Ensure that the sensor configuration (currently only heater is
 	 * supported) will not be changed during the process of reading
@@ -376,7 +381,6 @@ static int hdc3020_write_thresh(struct iio_dev *indio_dev,
 	u16 reg;
 	int ret;
 
-	dev_err(&data->client->dev, "JCC: val = %d, val2 = %d\n", val, val2);
 	/* Supported temperature range is from –40 to 125 degree celsius */
 	if (val < HDC3020_MIN_TEMP || val > HDC3020_MAX_TEMP)
 		return -EINVAL;
@@ -552,9 +556,53 @@ static const struct iio_info hdc3020_info = {
 	.write_event_value = hdc3020_write_thresh,
 };
 
-static void hdc3020_stop(void *data)
+static int hdc3020_power_off(struct hdc3020_data *data)
 {
-	hdc3020_exec_cmd((struct hdc3020_data *)data, HDC3020_EXIT_AUTO);
+	hdc3020_exec_cmd(data, HDC3020_EXIT_AUTO);
+
+	if (data->reset_gpio)
+		gpiod_set_value_cansleep(data->reset_gpio, 1);
+
+	return regulator_disable(data->vdd_supply);
+}
+
+static int hdc3020_power_on(struct hdc3020_data *data)
+{
+	int ret;
+
+	ret = regulator_enable(data->vdd_supply);
+	if (ret)
+		return ret;
+
+	fsleep(5000);
+
+	if (data->reset_gpio) {
+		gpiod_set_value_cansleep(data->reset_gpio, 0);
+		fsleep(3000);
+	}
+
+	if (data->client->irq) {
+		/*
+		 * The alert output is activated by default upon power up,
+		 * hardware reset, and soft reset. Clear the status register.
+		 */
+		ret = hdc3020_exec_cmd(data, HDC3020_S_STATUS);
+		if (ret) {
+			hdc3020_power_off(data);
+			return ret;
+		}
+	}
+
+	ret = hdc3020_exec_cmd(data, HDC3020_S_AUTO_10HZ_MOD0);
+	if (ret)
+		hdc3020_power_off(data);
+
+	return ret;
+}
+
+static void hdc3020_exit(void *data)
+{
+	hdc3020_power_off(data);
 }
 
 static int hdc3020_probe(struct i2c_client *client)
@@ -570,6 +618,8 @@ static int hdc3020_probe(struct i2c_client *client)
 	if (!indio_dev)
 		return -ENOMEM;
 
+	dev_set_drvdata(&client->dev, (void *)indio_dev);
+
 	data = iio_priv(indio_dev);
 	data->client = client;
 	mutex_init(&data->lock);
@@ -581,6 +631,22 @@ static int hdc3020_probe(struct i2c_client *client)
 	indio_dev->info = &hdc3020_info;
 	indio_dev->channels = hdc3020_channels;
 	indio_dev->num_channels = ARRAY_SIZE(hdc3020_channels);
+
+	data->vdd_supply = devm_regulator_get(&client->dev, "vdd");
+	if (IS_ERR(data->vdd_supply))
+		return dev_err_probe(&client->dev, PTR_ERR(data->vdd_supply),
+				     "Unable to get VDD regulator\n");
+
+	data->reset_gpio = devm_gpiod_get_optional(&client->dev, "reset",
+						   GPIOD_OUT_HIGH);
+	if (IS_ERR(data->reset_gpio))
+		return dev_err_probe(&client->dev, PTR_ERR(data->reset_gpio),
+				     "Cannot get reset GPIO\n");
+
+	ret = hdc3020_power_on(data);
+	if (ret)
+		return dev_err_probe(&client->dev, ret, "Power on failed\n");
+
 	if (client->irq) {
 		ret = devm_request_threaded_irq(&client->dev, client->irq,
 						NULL, hdc3020_interrupt_handler,
@@ -589,22 +655,9 @@ static int hdc3020_probe(struct i2c_client *client)
 		if (ret)
 			return dev_err_probe(&client->dev, ret,
 					     "Failed to request IRQ\n");
-
-		/*
-		 * The alert output is activated by default upon power up,
-		 * hardware reset, and soft reset. Clear the status register.
-		 */
-		ret = hdc3020_exec_cmd(data, HDC3020_S_STATUS);
-		if (ret)
-			return ret;
 	}
 
-	ret = hdc3020_exec_cmd(data, HDC3020_S_AUTO_10HZ_MOD0);
-	if (ret)
-		return dev_err_probe(&client->dev, ret,
-				     "Unable to set up measurement\n");
-
-	ret = devm_add_action_or_reset(&data->client->dev, hdc3020_stop, data);
+	ret = devm_add_action_or_reset(&data->client->dev, hdc3020_exit, data);
 	if (ret)
 		return ret;
 
@@ -614,6 +667,24 @@ static int hdc3020_probe(struct i2c_client *client)
 
 	return 0;
 }
+
+static int hdc3020_suspend(struct device *dev)
+{
+	struct iio_dev *iio_dev = dev_get_drvdata(dev);
+	struct hdc3020_data *data = iio_priv(iio_dev);
+
+	return hdc3020_power_off(data);
+}
+
+static int hdc3020_resume(struct device *dev)
+{
+	struct iio_dev *iio_dev = dev_get_drvdata(dev);
+	struct hdc3020_data *data = iio_priv(iio_dev);
+
+	return hdc3020_power_on(data);
+}
+
+static DEFINE_SIMPLE_DEV_PM_OPS(hdc3020_pm_ops, hdc3020_suspend, hdc3020_resume);
 
 static const struct i2c_device_id hdc3020_id[] = {
 	{ "hdc3020" },
@@ -634,6 +705,7 @@ MODULE_DEVICE_TABLE(of, hdc3020_dt_ids);
 static struct i2c_driver hdc3020_driver = {
 	.driver = {
 		.name = "hdc3020",
+		.pm = pm_sleep_ptr(&hdc3020_pm_ops),
 		.of_match_table = hdc3020_dt_ids,
 	},
 	.probe = hdc3020_probe,
