@@ -1044,6 +1044,10 @@ static inline struct i2c_adapter *of_get_i2c_adapter_by_node(struct device_node 
 	return i2c_get_adapter_by_fwnode(of_fwnode_handle(node));
 }
 
+const struct of_device_id
+*i2c_of_match_device(const struct of_device_id *matches,
+		     struct i2c_client *client);
+
 int of_i2c_get_board_info(struct device *dev, struct device_node *node,
 			  struct i2c_board_info *info);
 
@@ -1060,6 +1064,13 @@ static inline struct i2c_adapter *of_find_i2c_adapter_by_node(struct device_node
 }
 
 static inline struct i2c_adapter *of_get_i2c_adapter_by_node(struct device_node *node)
+{
+	return NULL;
+}
+
+static inline const struct of_device_id
+*i2c_of_match_device(const struct of_device_id *matches,
+		     struct i2c_client *client)
 {
 	return NULL;
 }
