@@ -908,6 +908,23 @@
 		};
 	};
 
+	fragment@59 {
+		target = <&i2cbus>;
+		__dormant__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			veml6031x00: veml6031x00@29 {
+				compatible = "vishay,veml6031x00";
+				reg = <0x29>;
+				interrupt-parent = <&gpio>;
+				interrupts = <4 IRQ_TYPE_EDGE_FALLING>;
+				pinctrl-0 = <&int_pins>;
+				pinctrl-names = "default";
+			};
+		};
+	};
 	fragment@98 {
 		target-path = "/";
 		__dormant__ {
@@ -999,6 +1016,7 @@
 		ad7999 = <0>,"+56", <&ad799x>,"compatible=adi,ad7999", <&ad799x>,"reg:0=0x29";
 		sts3x = <0>,"+57";
 		sht85 = <0>,"+58";
+		veml6031x00 = <0>,"+59+99";
 
 		addr =	<&bme280>,"reg:0", <&bmp280>,"reg:0", <&tmp102>,"reg:0",
 			<&lm75>,"reg:0", <&hdc100x>,"reg:0", <&sht3x>,"reg:0",
@@ -1027,7 +1045,8 @@
 			<&adxl345>, "interrupts:0",
 			<&tcs3472>, "interrupts:0",
 			<&veml6030>, "interrupts:0",
-			<&veml6035>, "interrupts:0";
+			<&veml6035>, "interrupts:0",
+			<&veml6031x00>, "interrupts:0";
 		label = <&ads7828>, "label",
 			<&ads7830>, "label";
 		no_timeout = <&jc42>, "smbus-timeout-disable?";
